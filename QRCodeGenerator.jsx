@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { QrCode, Link, MessageSquare, User, Download, Copy, Check } from 'lucide-react';
+import { QrCode, Link, MessageSquare, User, Download, Copy, Check, Music, Image, Upload, X } from 'lucide-react';
 
 const TRANSLATIONS = {
   "en-US": {
@@ -69,6 +69,11 @@ const QRCodeGenerator = () => {
     organization: '',
     url: ''
   });
+  const [audioFile, setAudioFile] = useState(null);
+  const [imageFile, setImageFile] = useState(null);
+  const [audioDataUrl, setAudioDataUrl] = useState('');
+  const [imageDataUrl, setImageDataUrl] = useState('');
+  const [uploadError, setUploadError] = useState('');
 
   // QR Code generation using QRious library via CDN
   const generateQRCode = async (text) => {
@@ -177,6 +182,70 @@ END:VCARD`;
     return vcard;
   };
 
+  // File upload handlers
+  const handleFileUpload = (file, type) => {
+    setUploadError('');
+    
+    if (!file) return;
+    
+    // Check file size limits
+    const maxSize = type === 'audio' ? 10 * 1024 * 1024 : 5 * 1024 * 1024; // 10MB for audio, 5MB for images
+    if (file.size > maxSize) {
+      setUploadError(t('fileTooLarge'));
+      return;
+    }
+    
+    // Check file types
+    const audioTypes = ['audio/mp3', 'audio/wav', 'audio/ogg', 'audio/m4a', 'audio/mpeg'];
+    const imageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/jpg'];
+    
+    if (type === 'audio' && !audioTypes.includes(file.type)) {
+      setUploadError(t('invalidFileType'));
+      return;
+    }
+    
+    if (type === 'image' && !imageTypes.includes(file.type)) {
+      setUploadError(t('invalidFileType'));
+      return;
+    }
+    
+    // Convert file to data URL
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target.result;
+      if (type === 'audio') {
+        setAudioFile(file);
+        setAudioDataUrl(dataUrl);
+      } else if (type === 'image') {
+        setImageFile(file);
+        setImageDataUrl(dataUrl);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleFileDrop = (e, type) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    handleFileUpload(file, type);
+  };
+
+  const handleFileSelect = (e, type) => {
+    const file = e.target.files[0];
+    handleFileUpload(file, type);
+  };
+
+  const removeFile = (type) => {
+    if (type === 'audio') {
+      setAudioFile(null);
+      setAudioDataUrl('');
+    } else if (type === 'image') {
+      setImageFile(null);
+      setImageDataUrl('');
+    }
+    setUploadError('');
+  };
+
   useEffect(() => {
     let data = '';
     
@@ -192,13 +261,19 @@ END:VCARD`;
           data = generateVCard(contactInfo);
         }
         break;
+      case 'audio':
+        data = audioDataUrl;
+        break;
+      case 'image':
+        data = imageDataUrl;
+        break;
       default:
         data = '';
     }
     
     setQrData(data);
     generateQRCode(data);
-  }, [activeTab, urlInput, textInput, contactInfo]);
+  }, [activeTab, urlInput, textInput, contactInfo, audioDataUrl, imageDataUrl]);
 
   const downloadQRCode = () => {
     if (!qrData) return;
@@ -244,6 +319,11 @@ END:VCARD`;
       organization: '',
       url: ''
     });
+    setAudioFile(null);
+    setImageFile(null);
+    setAudioDataUrl('');
+    setImageDataUrl('');
+    setUploadError('');
     setQrData('');
     if (qrContainerRef.current) {
       qrContainerRef.current.innerHTML = '';
@@ -253,7 +333,9 @@ END:VCARD`;
   const tabs = [
     { id: 'url', label: t('urlTab'), icon: Link },
     { id: 'text', label: t('textTab'), icon: MessageSquare },
-    { id: 'contact', label: t('contactTab'), icon: User }
+    { id: 'contact', label: t('contactTab'), icon: User },
+    { id: 'audio', label: t('audioTab'), icon: Music },
+    { id: 'image', label: t('imageTab'), icon: Image }
   ];
 
   return (
@@ -301,6 +383,8 @@ END:VCARD`;
                   {activeTab === 'url' && t('enterUrl')}
                   {activeTab === 'text' && t('enterText')}
                   {activeTab === 'contact' && t('contactInformation')}
+                  {activeTab === 'audio' && t('uploadAudio')}
+                  {activeTab === 'image' && t('uploadImage')}
                 </h2>
 
                 {/* URL Input */}
@@ -418,6 +502,123 @@ END:VCARD`;
                         placeholder={t('websitePlaceholder')}
                         className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
                       />
+                    </div>
+                  </div>
+                )}
+
+                {/* Audio Upload */}
+                {activeTab === 'audio' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        {t('audioFile')}
+                      </label>
+                      {!audioFile ? (
+                        <div
+                          className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-purple-400 transition-colors cursor-pointer"
+                          onDrop={(e) => handleFileDrop(e, 'audio')}
+                          onDragOver={(e) => e.preventDefault()}
+                          onClick={() => document.getElementById('audio-upload').click()}
+                        >
+                          <Music className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                          <p className="text-gray-600 mb-2">{t('dragDropAudio')}</p>
+                          <p className="text-xs text-gray-500">{t('supportedAudioFormats')}</p>
+                          <input
+                            id="audio-upload"
+                            type="file"
+                            accept="audio/*"
+                            onChange={(e) => handleFileSelect(e, 'audio')}
+                            className="hidden"
+                          />
+                        </div>
+                      ) : (
+                        <div className="bg-gray-50 rounded-xl p-4 flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <Music className="w-8 h-8 text-purple-600" />
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">{t('fileSelected')}</p>
+                              <p className="text-xs text-gray-500">{audioFile.name}</p>
+                              <p className="text-xs text-gray-500">{(audioFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => removeFile('audio')}
+                            className="text-red-500 hover:text-red-700 p-1"
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
+                        </div>
+                      )}
+                      {uploadError && (
+                        <p className="text-red-500 text-sm mt-2">{uploadError}</p>
+                      )}
+                      <p className="text-xs text-gray-500 mt-2">
+                        {t('audioUploadHelp')}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Image Upload */}
+                {activeTab === 'image' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        {t('imageFile')}
+                      </label>
+                      {!imageFile ? (
+                        <div
+                          className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-purple-400 transition-colors cursor-pointer"
+                          onDrop={(e) => handleFileDrop(e, 'image')}
+                          onDragOver={(e) => e.preventDefault()}
+                          onClick={() => document.getElementById('image-upload').click()}
+                        >
+                          <Image className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                          <p className="text-gray-600 mb-2">{t('dragDropImage')}</p>
+                          <p className="text-xs text-gray-500">{t('supportedImageFormats')}</p>
+                          <input
+                            id="image-upload"
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => handleFileSelect(e, 'image')}
+                            className="hidden"
+                          />
+                        </div>
+                      ) : (
+                        <div className="bg-gray-50 rounded-xl p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center space-x-3">
+                              <Image className="w-8 h-8 text-purple-600" />
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">{t('fileSelected')}</p>
+                                <p className="text-xs text-gray-500">{imageFile.name}</p>
+                                <p className="text-xs text-gray-500">{(imageFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => removeFile('image')}
+                              className="text-red-500 hover:text-red-700 p-1"
+                            >
+                              <X className="w-5 h-5" />
+                            </button>
+                          </div>
+                          {imageDataUrl && (
+                            <div className="mt-3">
+                              <img
+                                src={imageDataUrl}
+                                alt="Preview"
+                                className="w-full h-32 object-cover rounded-lg"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {uploadError && (
+                        <p className="text-red-500 text-sm mt-2">{uploadError}</p>
+                      )}
+                      <p className="text-xs text-gray-500 mt-2">
+                        {t('imageUploadHelp')}
+                      </p>
                     </div>
                   </div>
                 )}
